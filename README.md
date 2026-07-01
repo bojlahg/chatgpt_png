@@ -369,8 +369,3 @@ That means:
 
 The downside is that `app.js` is a single large file. At some point, if the project grows more, it may make sense to split the JavaScript into modules.
 
----
-
-## License
-
-Use it however you want unless your conscience objects. If you want a real license, add one to the repository, for example MIT.
