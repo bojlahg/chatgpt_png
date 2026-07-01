@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Transparent PNG Builder v45</title>
+  <link rel="stylesheet" href="styles.css?v=45">
+</head>
+<body>
+  <div class="wrap">
+    <div class="appHeader"><div class="appTitle">Transparent PNG Builder <span>v45</span></div></div>
+
+    <div class="grid">
+      <section class="card">
+        <div class="head leftHeadTabs">
+          <button class="leftTab active" type="button" data-left-tab="input">Input</button>
+          <button class="leftTab" type="button" data-left-tab="colors">Colors</button>
+          <button class="leftTab" type="button" data-left-tab="process">Process</button>
+          <button class="leftTab" type="button" data-left-tab="crop">Crop</button>
+          <button class="leftTab" type="button" data-left-tab="manual">Paint</button>
+          <button class="leftTab" type="button" data-left-tab="debug">Debug</button>
+        </div>
+        <div class="body compactBody">
+
+          <div class="leftPane active" data-left-pane="input">
+
+
+          <div class="panel">
+            <label>Input mode</label>
+            <select id="modeSelect">
+              <option value="two" selected>Two separate images</option>
+              <option value="split">One split image</option>
+            </select>
+            <div class="hint" style="margin-top:8px">One image containing two versions on different backgrounds.</div>
+          </div>
+
+          <div id="twoMode">
+            <div class="drop" id="dropA">
+              <label>Source A image</label>
+              
+              <input class="nativeFileInput" id="inputA" type="file" accept="image/*"><div class="fileRow"><button class="secondary small filePickBtn" type="button" data-file-input="inputA">Choose file</button><span class="fileName" id="fileNameA">No file</span></div>
+              <div class="mini" id="miniA">image A</div>
+            </div>
+
+            <div class="drop" id="dropB">
+              <label>Source B image</label>
+              
+              <input class="nativeFileInput" id="inputB" type="file" accept="image/*"><div class="fileRow"><button class="secondary small filePickBtn" type="button" data-file-input="inputB">Choose file</button><span class="fileName" id="fileNameB">No file</span></div>
+              <div class="mini" id="miniB">image B</div>
+            </div>
+          </div>
+
+          <div id="splitMode" class="hidden">
+            <div class="drop" id="dropSplit">
+              <label>Split image</label>
+              
+              <input class="nativeFileInput" id="inputSplit" type="file" accept="image/*"><div class="fileRow"><button class="secondary small filePickBtn" type="button" data-file-input="inputSplit">Choose file</button><span class="fileName" id="fileNameSplit">No file</span></div>
+              <div class="mini" id="miniSplit">split image</div>
+            </div>
+
+            <div class="row"><label>Split orientation</label></div>
+            <select id="splitOrientation">
+              <option value="auto" selected>Auto detect</option>
+              <option value="vertical">Vertical split (left/right)</option>
+              <option value="horizontal">Horizontal split (top/bottom)</option>
+            </select>
+            <div class="hint">Source A = left/top, Source B = right/bottom.</div>
+          </div>
+
+
+          </div>
+
+          <div class="leftPane" data-left-pane="colors">
+          <div class="panel">
+            <div><b>Background colors</b></div>
+            <div class="hint" style="margin-top:6px">Auto / HEX / RGB / picker.</div>
+
+            <div class="inlineGrid2">
+              <div>
+                <label>Background A</label>
+                <div class="swatch" id="swatchA"></div>
+              </div>
+              <div>
+                <label>Background B</label>
+                <div class="swatch" id="swatchB"></div>
+              </div>
+            </div>
+
+            <div class="inlineGrid2" style="margin-top:10px">
+              <div>
+                <label>HEX A</label>
+                <input id="hexA" type="text" value="#ffffff" maxlength="7">
+              </div>
+              <div>
+                <label>HEX B</label>
+                <input id="hexB" type="text" value="#000000" maxlength="7">
+              </div>
+            </div>
+
+            <div class="inlineGrid2" style="margin-top:10px">
+              <div>
+                <div class="inlineGrid3">
+                  <div><label>R A</label><input id="rA" type="number" min="0" max="255" value="255"></div>
+                  <div><label>G A</label><input id="gA" type="number" min="0" max="255" value="255"></div>
+                  <div><label>B A</label><input id="bA" type="number" min="0" max="255" value="255"></div>
+                </div>
+              </div>
+              <div>
+                <div class="inlineGrid3">
+                  <div><label>R B</label><input id="rB" type="number" min="0" max="255" value="0"></div>
+                  <div><label>G B</label><input id="gB" type="number" min="0" max="255" value="0"></div>
+                  <div><label>B B</label><input id="bB" type="number" min="0" max="255" value="0"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="inlineGrid2" style="margin-top:10px">
+              <button class="secondary small" id="resetColorsBtn" type="button">Reset colors to auto</button>
+              <button class="secondary small" id="swapColorsBtn" type="button">Swap A/B colors</button>
+            </div>
+
+            <div class="inlineGrid2" style="margin-top:10px">
+              <div>
+                <label>Pick color from Source A</label>
+                <div class="sourcePreview" id="previewA">click to pick A</div>
+              </div>
+              <div>
+                <label>Pick color from Source B</label>
+                <div class="sourcePreview" id="previewB">click to pick B</div>
+              </div>
+            </div>
+            <div class="hint" style="margin-top:8px">Click the preview to pick the background color.</div>
+          </div>
+
+
+          </div>
+
+          <div class="leftPane" data-left-pane="process">
+          <div class="row">
+            <label>Alpha low cut</label>
+            <span class="val" id="lowVal">0.015</span>
+          </div>
+          <input id="lowCut" type="range" min="0" max="0.08" step="0.001" value="0.015">
+          <div class="hint">Below this value = transparent.</div>
+
+          <div class="row">
+            <label>Alpha high cut</label>
+            <span class="val" id="highVal">0.985</span>
+          </div>
+          <input id="highCut" type="range" min="0.90" max="1" step="0.001" value="0.985">
+          <div class="hint">Above this value = opaque.</div>
+
+          <div class="row">
+            <label>Solidify interior above</label>
+            <span class="val" id="solidVal">0.750</span>
+          </div>
+          <input id="solidCut" type="range" min="0" max="1" step="0.01" value="0.75">
+          <div class="hint">Above this value alpha becomes 1.0.</div>
+
+          <div class="row">
+            <label>Final RGB mode</label>
+          </div>
+          <select id="rgbMode">
+            <option value="average" selected>Average recovered A+B</option>
+            <option value="sourceB">Recovered from Source B</option>
+            <option value="sourceA">Recovered from Source A</option>
+          </select>
+          <div class="hint">Average A+B usually reduces background tint.</div>
+
+          <div class="row">
+            <label>Desaturate result</label>
+            <span class="val" id="desatVal">0.000</span>
+          </div>
+          <input id="desatResult" type="range" min="0" max="1" step="0.01" value="0">
+          <div class="hint">0 = keep color, 1 = grayscale.</div>
+
+          <div class="panel" style="margin-top:14px">
+            <div><b>Alpha cleanup</b></div>
+            <div class="hint" style="margin-top:6px">Median cleanup is good at killing tiny pinholes and isolated junk pixels in alpha.</div>
+
+            <label class="checkRow" style="margin-top:10px"><input id="alphaMedian" type="checkbox"> <span>Enable alpha median cleanup</span></label>
+
+            <div class="row" style="margin-top:10px">
+              <label>Kernel size</label>
+            </div>
+            <select id="alphaMedianKernel">
+              <option value="1" selected>3×3</option>
+              <option value="2">5×5</option>
+            </select>
+
+            <div class="row" style="margin-top:10px">
+              <label>Passes</label>
+              <span class="val" id="alphaMedianPassesVal">1</span>
+            </div>
+            <input id="alphaMedianPasses" type="range" min="1" max="3" step="1" value="1">
+
+            <div class="row">
+              <label>Cleanup strength</label>
+              <span class="val" id="alphaMedianBlendVal">1.000</span>
+            </div>
+            <input id="alphaMedianBlend" type="range" min="0" max="1" step="0.001" value="1.000">
+            <div class="hint">1.0 = full median alpha, lower values blend with the original alpha.</div>
+          </div>
+
+          </div>
+
+          <div class="leftPane" data-left-pane="crop">
+          <div class="panel">
+            <div><b>Crop sprite</b></div>
+            <div class="hint" style="margin-top:6px">Crop is applied after Build. The rectangle is shown in the Crop box tab.</div>
+
+            <div class="row">
+              <label>Crop mode</label>
+            </div>
+            <select id="cropMode">
+              <option value="none" selected>No crop</option>
+              <option value="alpha">Crop to alpha bounds</option>
+              <option value="sourceUnion">Crop to source bounds (union)</option>
+            </select>
+
+            <div class="row">
+              <label>Crop threshold</label>
+              <span class="val" id="cropThresholdVal">0.010</span>
+            </div>
+            <input id="cropThreshold" type="range" min="0" max="1" step="0.001" value="0.01">
+
+            <div class="row">
+              <label>Crop padding</label>
+              <span class="val" id="cropPaddingVal">0</span>
+            </div>
+            <input id="cropPadding" type="range" min="0" max="256" step="1" value="0">
+
+            <div class="hint">Alpha = crop by output alpha. Source union = crop by source/background difference.</div>
+          <div class="hint"><b>Important:</b> after changing crop settings, press “Build transparent PNG” again.</div>
+          </div>
+
+          <div class="panel">
+            <div><b>Offsets (px)</b></div>
+            <div class="hint" style="margin-top:6px">Shift the two sources relative to each other.</div>
+
+            <div class="row"><label>Source A offset X</label><span class="val" id="offAXVal">0</span></div>
+            <input id="offAX" type="range" min="-200" max="200" step="1" value="0">
+
+            <div class="row"><label>Source A offset Y</label><span class="val" id="offAYVal">0</span></div>
+            <input id="offAY" type="range" min="-200" max="200" step="1" value="0">
+
+            <div class="row"><label>Source B offset X</label><span class="val" id="offBXVal">0</span></div>
+            <input id="offBX" type="range" min="-200" max="200" step="1" value="0">
+
+            <div class="row"><label>Source B offset Y</label><span class="val" id="offBYVal">0</span></div>
+            <input id="offBY" type="range" min="-200" max="200" step="1" value="0">
+
+            <button class="secondary small" id="resetOffsetsBtn" type="button">Reset offsets</button>
+          </div>
+
+
+          </div>
+
+          <div class="leftPane" data-left-pane="manual">
+          <div class="stack">
+            <div class="controlCard manualBrushCard">
+            <div class="sectionTitle">Paint layer</div>
+            <div class="hint" style="margin-top:6px">Persistent red edit layer. It survives <b>Build</b> and resets only when another input image is loaded, or when you press Reset paint layer.</div>
+
+            <label class="checkRow"><input id="paintEnabled" type="checkbox"> <span>Enable paint layer</span></label>
+
+            <label style="margin-top:12px">Brush mode</label>
+            <select id="paintMode">
+              <option value="set" selected>Set alpha to target</option>
+              <option value="erase">Erase paint layer mask</option>
+            </select>
+
+            <div class="sliderRow" style="margin-top:10px">
+              <span>Brush size</span>
+              <span id="paintSizeVal">48</span>
+            </div>
+            <input id="paintSize" type="range" min="1" max="256" step="1" value="48">
+
+            <div class="sliderRow">
+              <span>Brush strength</span>
+              <span id="paintStrengthVal">1.000</span>
+            </div>
+            <input id="paintStrength" type="range" min="0" max="1" step="0.001" value="1.000">
+
+            <div class="sliderRow">
+              <span>Target alpha</span>
+              <span id="paintTargetVal">1.000</span>
+            </div>
+            <input id="paintTarget" type="range" min="0" max="1" step="0.001" value="1.000">
+
+            <div class="row" style="margin-top:12px; gap:8px; align-items:stretch;">
+              <button class="secondary small" id="paintUndoBtn" type="button">Undo stroke</button>
+              <button class="secondary small" id="paintResetLayerBtn" type="button">Reset paint layer</button>
+            </div>
+            <div class="hint" style="margin-top:8px">Red overlay shows edited pixels. Use Alpha mask for precise cleanup, or Result/Dark/Light to judge the final sprite.</div>
+          </div>
+          </div>
+        </div>
+
+        <div class="leftPane" data-left-pane="debug">
+          <div class="stack">
+          <div class="diagnostics" id="diagnostics">
+            <div><b>Diagnostics</b></div>
+            <div class="hint" style="margin-top:6px">Technical information appears here after processing.</div>
+          </div>
+
+          <div class="controlCard experimentalCard">
+            <div class="sectionTitle">Experimental solver options</div>
+            <div class="hint" style="margin-top:6px">Try these independently. Later we can keep only what actually helps.</div>
+
+            <label class="checkRow"><input id="solveLinear" type="checkbox"> <span>Solve in linear color space</span></label>
+            <div class="hint" style="margin-top:6px">Linear can improve true translucency, but may exaggerate generated cast shadows. Keep it off for assets with baked shadows.</div>
+
+            <div class="divider"></div>
+
+            <label class="checkRow"><input id="shadowSuppress" type="checkbox"> <span>Cast shadow suppression</span></label>
+            <div class="hint" style="margin-top:6px">Experimental: removes soft shadow-only pixels when one source looks like background and the other only contains a medium dark cast shadow.</div>
+
+            <div class="sliderRow" style="margin-top:10px">
+              <span>Shadow threshold</span>
+              <span id="shadowThresholdVal">0.120</span>
+            </div>
+            <input id="shadowThreshold" type="range" min="0" max="1" step="0.001" value="0.120">
+
+            <div class="sliderRow">
+              <span>Other-source bg tolerance</span>
+              <span id="shadowBgToleranceVal">0.050</span>
+            </div>
+            <input id="shadowBgTolerance" type="range" min="0" max="1" step="0.001" value="0.050">
+
+            <div class="sliderRow">
+              <span>Shadow min luma</span>
+              <span id="shadowMinLumaVal">0.080</span>
+            </div>
+            <input id="shadowMinLuma" type="range" min="0" max="1" step="0.001" value="0.080">
+
+            <div class="sliderRow">
+              <span>Shadow alpha ceiling</span>
+              <span id="shadowAlphaCeilVal">0.000</span>
+            </div>
+            <input id="shadowAlphaCeil" type="range" min="0" max="1" step="0.001" value="0.000">
+
+            <div class="divider"></div>
+
+            <label style="margin-top:12px">Alpha solve method</label>
+            <select id="alphaMethod">
+              <option value="projection" selected>Vector projection (current default)</option>
+              <option value="channelAverage">Per-channel average</option>
+              <option value="channelMedian">Per-channel median</option>
+              <option value="channelMax">Per-channel max</option>
+            </select>
+
+            <div class="divider"></div>
+
+            <label class="checkRow"><input id="coreBoost" type="checkbox"> <span>Core alpha boost</span></label>
+
+            <div class="sliderRow" style="margin-top:10px">
+              <span>Core threshold</span>
+              <span id="coreThresholdVal">0.080</span>
+            </div>
+            <input id="coreThreshold" type="range" min="0" max="1" step="0.001" value="0.080">
+
+            <div class="sliderRow">
+              <span>Core alpha floor</span>
+              <span id="coreFloorVal">0.950</span>
+            </div>
+            <input id="coreFloor" type="range" min="0" max="1" step="0.001" value="0.950">
+
+            <div class="divider"></div>
+
+            <label class="checkRow"><input id="unionBoost" type="checkbox"> <span>One-sided object boost</span></label>
+            <div class="hint" style="margin-top:6px">Useful for dark object parts on black background: one source can prove the object even when the other looks like background.</div>
+
+            <div class="sliderRow" style="margin-top:10px">
+              <span>Object threshold</span>
+              <span id="unionThresholdVal">0.120</span>
+            </div>
+            <input id="unionThreshold" type="range" min="0" max="1" step="0.001" value="0.120">
+
+            <div class="sliderRow">
+              <span>Source similarity</span>
+              <span id="unionSimilarityVal">0.100</span>
+            </div>
+            <input id="unionSimilarity" type="range" min="0" max="1" step="0.001" value="0.100">
+
+            <div class="sliderRow">
+              <span>Object alpha floor</span>
+              <span id="unionFloorVal">0.900</span>
+            </div>
+            <input id="unionFloor" type="range" min="0" max="1" step="0.001" value="0.900">
+
+            <div class="divider"></div>
+
+            <label class="checkRow"><input id="bgVeto" type="checkbox"> <span>Dual background veto</span></label>
+            <div class="hint" style="margin-top:6px">If both sources look like their own background, kill alpha. Good for leftover halos and weak false-positive pixels.</div>
+
+            <div class="sliderRow" style="margin-top:10px">
+              <span>BG tolerance</span>
+              <span id="bgVetoToleranceVal">0.060</span>
+            </div>
+            <input id="bgVetoTolerance" type="range" min="0" max="1" step="0.001" value="0.060">
+
+            <label class="checkRow" style="margin-top:10px"><input id="bgVetoLowAlphaOnly" type="checkbox" checked> <span>Apply only to low alpha</span></label>
+
+            <div class="sliderRow" style="margin-top:10px">
+              <span>Alpha ceiling</span>
+              <span id="bgVetoAlphaCeilVal">0.650</span>
+            </div>
+            <input id="bgVetoAlphaCeil" type="range" min="0" max="1" step="0.001" value="0.650">
+
+            <div class="divider"></div>
+
+            <label class="checkRow"><input id="darkRescue" type="checkbox"> <span>Dark region rescue</span></label>
+
+            <div class="sliderRow" style="margin-top:10px">
+              <span>Dark threshold</span>
+              <span id="darkThresholdVal">0.180</span>
+            </div>
+            <input id="darkThreshold" type="range" min="0" max="1" step="0.001" value="0.180">
+
+            <div class="sliderRow">
+              <span>Dark alpha boost</span>
+              <span id="darkBoostVal">0.250</span>
+            </div>
+            <input id="darkBoost" type="range" min="0" max="1" step="0.001" value="0.250">
+          </div>
+          </div>
+        </div>
+
+          <div class="stickyActions">
+            <div class="compactTitle">Build result</div>
+          <button class="primary" id="processBtn">Build transparent PNG</button>
+          <a class="btn secondary" id="downloadBtn" style="display:none" download="transparent.png">Download transparent.png</a>
+
+          <div class="status" id="status"></div>
+
+
+          </div>
+        </div>
+      </section>
+
+      <section class="card previewCardSticky">
+        <div class="tabs">
+          <div class="tab active" data-view="checker">Result</div>
+          <div class="tab" data-view="dark">Dark preview</div>
+          <div class="tab" data-view="light">Light preview</div>
+          <div class="tab" data-view="alpha">Alpha mask</div>
+          <div class="tab" data-view="coremask">Core mask</div>
+          <div class="tab" data-view="cropbox">Crop box</div>
+          <div class="tab" data-view="mismatch">Mismatch overlay</div>
+        </div>
+
+        <div class="zoomBar">
+          <span>Zoom</span>
+          <select id="viewerZoom">
+            <option value="fit" selected>Fit</option>
+            <option value="1">100%</option>
+            <option value="2">200%</option>
+            <option value="4">400%</option>
+            <option value="8">800%</option>
+          </select>
+          <span class="hint" id="zoomHint">Ctrl + wheel zooms. Wheel/scrollbars move the zoomed preview. Left paints, middle pans.</span>
+        </div>
+
+        <div class="body">
+          <div class="viewer empty" id="viewer"></div>
+          <div class="meta" id="meta">
+            
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+    <section class="card samplesPanel hidden" id="samplesPanel">
+      <div class="head">Sample inputs</div>
+      <div class="body">
+        <div class="hint" id="samplesHint">Auto-loads <code>samples.json</code> from the same folder. Hidden when the file is missing or empty.</div>
+        <div class="samplesGrid" id="samplesList"></div>
+      </div>
+    </section>
+
+
+<script src="app.js?v=45"></script>
+</body>
+</html>

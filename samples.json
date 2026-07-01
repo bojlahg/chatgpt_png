@@ -1,0 +1,34 @@
+{
+  "samples": [
+    {
+      "label": "Fox black / white",
+      "mode": "two",
+      "sourceA": "samples/fox_black.png",
+      "sourceB": "samples/fox_white.png"
+    },
+    {
+      "label": "Rabbit split left-right red / green",
+      "mode": "split",
+      "split": "samples/rabbit.png",
+      "orientation": "vertical"
+    },
+    {
+      "label": "Girl split left-right black / white",
+      "mode": "split",
+      "split": "samples/girl.png",
+      "orientation": "vertical"
+    },
+    {
+      "label": "Robot split left-right black / white",
+      "mode": "split",
+      "split": "samples/robot.png",
+      "orientation": "vertical"
+    },
+    {
+      "label": "Smoke split left-right red / green",
+      "mode": "split",
+      "split": "samples/smoke.png",
+      "orientation": "vertical"
+    }
+  ]
+}
