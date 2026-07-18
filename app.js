@@ -1,5 +1,5 @@
 "use strict";
-console.info("Transparent PNG Builder app.js v47 loaded");
+console.info("Transparent PNG Builder app.js v50 loaded");
 
 const modeSelect = document.getElementById("modeSelect");
 const twoMode = document.getElementById("twoMode");
@@ -47,6 +47,7 @@ const cropPadding = document.getElementById("cropPadding");
 const sliceMode = document.getElementById("sliceMode");
 const sliceGridSettings = document.getElementById("sliceGridSettings");
 const sliceAutoSettings = document.getElementById("sliceAutoSettings");
+const sliceActions = document.getElementById("sliceActions");
 const sliceColumns = document.getElementById("sliceColumns");
 const sliceRows = document.getElementById("sliceRows");
 const sliceGapX = document.getElementById("sliceGapX");
@@ -113,6 +114,7 @@ const offAX = document.getElementById("offAX");
 const offAY = document.getElementById("offAY");
 const offBX = document.getElementById("offBX");
 const offBY = document.getElementById("offBY");
+const autoAlignX = document.getElementById("autoAlignX");
 
 const offAXVal = document.getElementById("offAXVal");
 const offAYVal = document.getElementById("offAYVal");
@@ -159,6 +161,7 @@ let sliceExportGeneration = 0;
 let sliceExporting = false;
 let currentView = "checker";
 let lastCropPreview = null;
+let lastAutoAlignment = null;
 
 let paintBaseResultData = null;
 let paintBaseAlphaData = null;
@@ -317,7 +320,7 @@ modeSelect.addEventListener("change", async () => {
 updateSliderLabels();
 updateModeUi();
 
-[solveLinear, shadowSuppress, alphaMethod, coreBoost, unionBoost, alphaMedian, alphaMedianKernel, bgVeto, bgVetoLowAlphaOnly, darkRescue].forEach(el => el.addEventListener("change", invalidateResult));
+[solveLinear, shadowSuppress, alphaMethod, coreBoost, unionBoost, alphaMedian, alphaMedianKernel, bgVeto, bgVetoLowAlphaOnly, darkRescue, autoAlignX].forEach(el => el.addEventListener("change", invalidateResult));
 [shadowThreshold, shadowBgTolerance, shadowMinLuma, shadowAlphaCeil, coreThreshold, coreFloor, unionThreshold, unionSimilarity, unionFloor, bgVetoTolerance, bgVetoAlphaCeil, alphaMedianPasses, alphaMedianBlend, darkThreshold, darkBoost].forEach(el => el.addEventListener("input", invalidateResult));
 
 resetOffsetsBtn.addEventListener("click", () => {
@@ -402,6 +405,7 @@ function invalidateResult() {
   paintBaseResultData = null;
   paintBaseAlphaData = null;
   lastCropPreview = null;
+  lastAutoAlignment = null;
   if (downloadUrl) {
     URL.revokeObjectURL(downloadUrl);
     downloadUrl = null;
@@ -800,24 +804,114 @@ async function refreshPreparedSources(resetColorControls = false) {
     `</div>`;
 }
 
-function computeCanvasLayout(imgA, imgB, offAXv, offAYv, offBXv, offBYv) {
-  const minX = Math.min(offAXv, offBXv, 0);
+function buildHorizontalEdgeProfile(img) {
+  const profile = new Float64Array(img.width);
+  const data = img.data;
+
+  for (let y = 0; y < img.height; y += 2) {
+    let left = (y * img.width) * 4;
+    for (let x = 1; x < img.width; x++) {
+      const current = left + 4;
+      profile[x] +=
+        Math.abs(data[current] - data[left]) +
+        Math.abs(data[current + 1] - data[left + 1]) +
+        Math.abs(data[current + 2] - data[left + 2]);
+      left = current;
+    }
+  }
+
+  let mean = 0;
+  for (let x = 0; x < profile.length; x++) mean += profile[x];
+  mean /= Math.max(1, profile.length);
+  let variance = 0;
+  for (let x = 0; x < profile.length; x++) {
+    profile[x] -= mean;
+    variance += profile[x] * profile[x];
+  }
+  const scale = Math.sqrt(variance / Math.max(1, profile.length)) || 1;
+  for (let x = 0; x < profile.length; x++) profile[x] /= scale;
+  return profile;
+}
+
+function scoreHorizontalAlignment(profileA, profileB, scale, translate) {
+  let sum = 0;
+  let count = 0;
+  const margin = 4;
+
+  for (let x = margin; x < profileA.length - margin; x++) {
+    const bx = x * scale + translate;
+    const x0 = Math.floor(bx);
+    const t = bx - x0;
+    if (x0 < margin || x0 + 1 >= profileB.length - margin) continue;
+    const b = profileB[x0] * (1 - t) + profileB[x0 + 1] * t;
+    sum += profileA[x] * b;
+    count++;
+  }
+
+  return count > 0 ? sum / count : -Infinity;
+}
+
+function estimateHorizontalAlignment(imgA, imgB) {
+  const profileA = buildHorizontalEdgeProfile(imgA);
+  const profileB = buildHorizontalEdgeProfile(imgB);
+  let best = { scale: 1, translate: 0, score: scoreHorizontalAlignment(profileA, profileB, 1, 0) };
+  const identityScore = best.score;
+
+  for (let scale = 0.985; scale <= 1.015001; scale += 0.0005) {
+    for (let translate = -12; translate <= 12; translate += 1) {
+      const score = scoreHorizontalAlignment(profileA, profileB, scale, translate);
+      if (score > best.score) best = { scale, translate, score };
+    }
+  }
+
+  const coarse = best;
+  for (let scale = coarse.scale - 0.001; scale <= coarse.scale + 0.001001; scale += 0.0001) {
+    for (let translate = coarse.translate - 1; translate <= coarse.translate + 1.001; translate += 0.2) {
+      const score = scoreHorizontalAlignment(profileA, profileB, scale, translate);
+      if (score > best.score) best = { scale, translate, score };
+    }
+  }
+
+  return {
+    scale: best.scale,
+    translate: best.translate,
+    score: best.score,
+    identityScore,
+    improvement: best.score - identityScore
+  };
+}
+
+function computeCanvasLayout(imgA, imgB, offAXv, offAYv, offBXv, offBYv, transformB = null) {
+  const bScale = transformB?.scale || 1;
+  const bTranslate = transformB?.translate || 0;
+  const bMinX = offBXv - bTranslate / bScale;
+  const bMaxX = offBXv + (imgB.width - bTranslate) / bScale;
+  const minX = Math.floor(Math.min(offAXv, bMinX, 0));
   const minY = Math.min(offAYv, offBYv, 0);
-  const maxX = Math.max(offAXv + imgA.width, offBXv + imgB.width);
+  const maxX = Math.ceil(Math.max(offAXv + imgA.width, bMaxX));
   const maxY = Math.max(offAYv + imgA.height, offBYv + imgB.height);
   return { minX, minY, width: maxX - minX, height: maxY - minY };
 }
 
-function sampleAligned(img, bg, x, y, ox, oy, minX, minY) {
-  const sx = x - (ox - minX);
+function sampleAligned(img, bg, x, y, ox, oy, minX, minY, transform = null) {
+  const localX = x - (ox - minX);
+  const sx = transform ? localX * transform.scale + transform.translate : localX;
   const sy = y - (oy - minY);
 
-  if (sx < 0 || sy < 0 || sx >= img.width || sy >= img.height) {
+  if (sx < 0 || sy < 0 || sx > img.width - 1 || sy >= img.height) {
     return bg;
   }
 
-  const i = (sy * img.width + sx) * 4;
-  return [img.data[i] / 255.0, img.data[i + 1] / 255.0, img.data[i + 2] / 255.0];
+  const x0 = Math.floor(sx);
+  const x1 = Math.min(img.width - 1, x0 + 1);
+  const t = sx - x0;
+  const i0 = (sy * img.width + x0) * 4;
+  const i1 = (sy * img.width + x1) * 4;
+  return [
+    (img.data[i0] * (1 - t) + img.data[i1] * t) / 255.0,
+    (img.data[i0 + 1] * (1 - t) + img.data[i1 + 1] * t) / 255.0,
+    (img.data[i0 + 2] * (1 - t) + img.data[i1 + 2] * t) / 255.0
+  ];
 }
 
 function qualityLabel(avgMismatch, badPct) {
@@ -862,7 +956,7 @@ function colorDistance01(a, b) {
   return Math.sqrt((dr * dr + dg * dg + db * db) / 3.0);
 }
 
-function computeSourceUnionBounds(srcA, srcB, bgA, bgB, layout, aox, aoy, box, boy, threshold01) {
+function computeSourceUnionBounds(srcA, srcB, bgA, bgB, layout, aox, aoy, box, boy, threshold01, transformB = null) {
   const width = layout.width;
   const height = layout.height;
   let minX = width, minY = height, maxX = -1, maxY = -1;
@@ -870,7 +964,7 @@ function computeSourceUnionBounds(srcA, srcB, bgA, bgB, layout, aox, aoy, box, b
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const a = sampleAligned(srcA, bgA, x, y, aox, aoy, layout.minX, layout.minY);
-      const b = sampleAligned(srcB, bgB, x, y, box, boy, layout.minX, layout.minY);
+      const b = sampleAligned(srcB, bgB, x, y, box, boy, layout.minX, layout.minY, transformB);
 
       const da = colorDistance01(a, bgA);
       const db = colorDistance01(b, bgB);
@@ -1374,6 +1468,7 @@ function calculateAutoSliceLayout(sourceCanvas) {
 
 function calculateSliceLayout() {
   if (!resultCanvas) return null;
+  if (sliceMode.value === "disabled") return null;
   if (sliceMode.value === "auto") {
     return calculateAutoSliceLayout(createPreparedExportCanvas());
   }
@@ -1424,9 +1519,17 @@ function invalidateSliceArtifacts() {
 }
 
 function updateSliceUi() {
+  const disabledMode = sliceMode.value === "disabled";
   const autoMode = sliceMode.value === "auto";
-  sliceGridSettings.classList.toggle("hidden", autoMode);
-  sliceAutoSettings.classList.toggle("hidden", !autoMode);
+  sliceGridSettings.classList.toggle("hidden", disabledMode || autoMode);
+  sliceAutoSettings.classList.toggle("hidden", disabledMode || !autoMode);
+  sliceActions.classList.toggle("hidden", disabledMode);
+
+  if (disabledMode) {
+    downloadSlicesBtn.disabled = true;
+    sliceGridCanvas = null;
+    return null;
+  }
 
   if (!resultCanvas) {
     sliceSummary.textContent = autoMode ? "Build a result to detect objects." : "Build a result to calculate tile size.";
@@ -1969,7 +2072,17 @@ async function processImages() {
     const box = Number(offBX.value);
     const boy = Number(offBY.value);
 
-    const layout = computeCanvasLayout(srcA, srcB, aox, aoy, box, boy);
+    let alignmentB = null;
+    if (autoAlignX.checked) {
+      const estimate = estimateHorizontalAlignment(srcA, srcB);
+      const applied = Number.isFinite(estimate.score) && estimate.improvement >= 0.002;
+      lastAutoAlignment = { ...estimate, applied };
+      if (applied) alignmentB = estimate;
+    } else {
+      lastAutoAlignment = null;
+    }
+
+    const layout = computeCanvasLayout(srcA, srcB, aox, aoy, box, boy, alignmentB);
     const width = layout.width;
     const height = layout.height;
     const pixelCount = width * height;
@@ -2066,7 +2179,7 @@ async function processImages() {
       const i = p * 4;
 
       const aSrc = sampleAligned(srcA, bgA, x, y, aox, aoy, layout.minX, layout.minY);
-      const bSrc = sampleAligned(srcB, bgB, x, y, box, boy, layout.minX, layout.minY);
+      const bSrc = sampleAligned(srcB, bgB, x, y, box, boy, layout.minX, layout.minY, alignmentB);
 
       const a = toWorkColor(aSrc, useLinear);
       const b = toWorkColor(bSrc, useLinear);
@@ -2310,7 +2423,7 @@ async function processImages() {
       const bounds = computeAlphaBounds(outImage.data, width, height, byteFromFloat(cropThresholdValue));
       cropInfo = applyBoundsToCropInfo(bounds, width, height, cropPaddingValue, cropThresholdValue, cropModeValue);
     } else if (cropModeValue === "sourceUnion") {
-      const bounds = computeSourceUnionBounds(srcA, srcB, bgA, bgB, layout, aox, aoy, box, boy, cropThresholdValue);
+      const bounds = computeSourceUnionBounds(srcA, srcB, bgA, bgB, layout, aox, aoy, box, boy, cropThresholdValue, alignmentB);
       cropInfo = applyBoundsToCropInfo(bounds, width, height, cropPaddingValue, cropThresholdValue, cropModeValue);
     }
 
@@ -2345,6 +2458,9 @@ async function processImages() {
     const avgMismatch = mismatchCount > 0 ? mismatchSum / mismatchCount : 0.0;
     const badPct = mismatchCount > 0 ? (badCount / mismatchCount) * 100.0 : 0.0;
     const q = qualityLabel(avgMismatch, badPct);
+    const alignmentDescription = lastAutoAlignment
+      ? `${lastAutoAlignment.applied ? "applied" : "not needed"} · scale X <code>${lastAutoAlignment.scale.toFixed(6)}</code> · shift <code>${lastAutoAlignment.translate.toFixed(2)}</code> px · score <code>${lastAutoAlignment.score.toFixed(3)}</code>`
+      : `off`;
 
     diagnosticsEl.innerHTML =
       `<div><b>Diagnostics</b></div>` +
@@ -2359,6 +2475,7 @@ async function processImages() {
       `Average difference inside the object: <code>${avgMismatch.toFixed(4)}</code><br>` +
       `Problem pixels (&gt; 0.08): <code>${badPct.toFixed(2)}%</code><br>` +
       `Maximum difference: <code>${maxMismatch.toFixed(4)}</code><br>` +
+      `Auto-align X: ${alignmentDescription}<br>` +
       `Experimental: linear <code>${useLinear ? "on" : "off"}</code> · alpha method <code>${alphaMethodValue}</code><br>` +
       `Shadow suppression: <code>${shadowSuppressEnabled ? "on" : "off"}</code> · threshold <code>${shadowThresholdValue.toFixed(3)}</code> · bg tolerance <code>${shadowBgToleranceValue.toFixed(3)}</code> · min luma <code>${shadowMinLumaValue.toFixed(3)}</code> · alpha ceiling <code>${shadowAlphaCeilValue.toFixed(3)}</code><br>` +
       `Core boost: <code>${coreBoostEnabled ? "on" : "off"}</code> · threshold <code>${coreThresholdValue.toFixed(3)}</code> · floor <code>${coreFloorValue.toFixed(3)}</code><br>` +
@@ -2381,6 +2498,7 @@ async function processImages() {
       `final RGB mode: <code>${rgbMode ? rgbMode.value : "average"}</code><br>` +
       `desaturate result: <code>${desat.toFixed(3)}</code><br>` +
       `experimental: linear <code>${useLinear ? "on" : "off"}</code> · alpha method <code>${alphaMethodValue}</code><br>` +
+      `auto-align X: ${alignmentDescription}<br>` +
       `shadow suppression: <code>${shadowSuppressEnabled ? "on" : "off"}</code> · threshold <code>${shadowThresholdValue.toFixed(3)}</code> · bg tolerance <code>${shadowBgToleranceValue.toFixed(3)}</code> · min luma <code>${shadowMinLumaValue.toFixed(3)}</code> · alpha ceiling <code>${shadowAlphaCeilValue.toFixed(3)}</code><br>` +
       `core boost: <code>${coreBoostEnabled ? "on" : "off"}</code> · threshold <code>${coreThresholdValue.toFixed(3)}</code> · floor <code>${coreFloorValue.toFixed(3)}</code><br>` +
       `one-sided boost: <code>${unionBoostEnabled ? "on" : "off"}</code> · threshold <code>${unionThresholdValue.toFixed(3)}</code> · similarity <code>${unionSimilarityValue.toFixed(3)}</code> · floor <code>${unionFloorValue.toFixed(3)}</code><br>` +

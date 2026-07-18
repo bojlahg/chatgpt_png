@@ -135,6 +135,12 @@ It supports:
 - optional desaturation,
 - optional crop.
 
+### Alignment
+
+Manual X/Y offsets shift either source by whole pixels. The experimental **Auto-align horizontal scale** option additionally estimates a small horizontal scale and subpixel shift for Source B relative to Source A on every Build. This is useful when an image generator redraws the same sheet slightly wider or narrower on another background, causing alignment error to grow from left to right.
+
+The detected scale, shift, correlation score, and whether the transform was applied are shown in Diagnostics. Auto alignment is off by default and does not replace manual vertical offsets.
+
 ### Alpha cleanup
 
 Median cleanup can remove tiny holes and isolated noisy pixels in the alpha mask.
@@ -164,7 +170,7 @@ This is useful when an otherwise good generated sprite has a few dirty areas, sh
 
 ### Slicing
 
-The **Slice** tab divides the built transparent PNG into separate files. It works on the final result after crop and Paint edits and has two modes.
+The **Slice** tab divides the built transparent PNG into separate files. It works on the final result after crop and Paint edits. Slicing is **Disabled** by default; no layout detection or slice preview is generated until Fixed grid or Auto-detect objects is selected.
 
 **Fixed grid** uses:
 

@@ -6,12 +6,12 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Transparent PNG Builder v47</title>
-  <link rel="stylesheet" href="styles.css?v=47">
+  <title>Transparent PNG Builder v50</title>
+  <link rel="stylesheet" href="styles.css?v=50">
 </head>
 <body>
   <div class="wrap">
-    <div class="appHeader"><div class="appTitle">Transparent PNG Builder <span>v47</span></div></div>
+    <div class="appHeader"><div class="appTitle">Transparent PNG Builder <span>v50</span></div></div>
 
     <div class="grid">
       <section class="card">
@@ -241,6 +241,9 @@
             <div><b>Offsets (px)</b></div>
             <div class="hint" style="margin-top:6px">Shift the two sources relative to each other.</div>
 
+            <label class="checkRow"><input id="autoAlignX" type="checkbox"> <span>Auto-align horizontal scale</span></label>
+            <div class="hint">Experimental: estimates horizontal scale and subpixel shift of Source B relative to Source A on every Build.</div>
+
             <div class="row"><label>Source A offset X</label><span class="val" id="offAXVal">0</span></div>
             <input id="offAX" type="range" min="-200" max="200" step="1" value="0">
 
@@ -266,7 +269,8 @@
 
               <label for="sliceMode">Slice mode</label>
               <select id="sliceMode">
-                <option value="grid" selected>Fixed grid</option>
+                <option value="disabled" selected>Disabled</option>
+                <option value="grid">Fixed grid</option>
                 <option value="auto">Auto-detect objects</option>
               </select>
 
@@ -334,9 +338,11 @@
                 <div class="hint">Increase merge gaps when one icon is split into pieces. Increase the alpha threshold or minimum pixels to ignore noise.</div>
               </div>
 
-              <div class="sliceSummary hint" id="sliceSummary">Build a result to calculate tile size.</div>
-              <button class="secondary" id="downloadSlicesBtn" type="button" disabled>Download slices ZIP</button>
-              <div class="hint">Objects are numbered from left to right, top to bottom. Fully transparent fixed-grid tiles are skipped without renumbering later positions.</div>
+              <div id="sliceActions">
+                <div class="sliceSummary hint" id="sliceSummary">Build a result to calculate tile size.</div>
+                <button class="secondary" id="downloadSlicesBtn" type="button" disabled>Download slices ZIP</button>
+                <div class="hint">Objects are numbered from left to right, top to bottom. Fully transparent fixed-grid tiles are skipped without renumbering later positions.</div>
+              </div>
             </div>
           </div>
 
@@ -565,6 +571,6 @@
     </section>
 
 
-<script src="app.js?v=47"></script>
+<script src="app.js?v=50"></script>
 </body>
 </html>

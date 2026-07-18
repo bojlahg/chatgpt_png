@@ -13,6 +13,12 @@
       "sourceB": "samples/icons_green.png"
     },
     {
+      "label": "Icons 2 red / blue (horizontal drift)",
+      "mode": "two",
+      "sourceA": "samples/icons2_red.png",
+      "sourceB": "samples/icons2_blue.png"
+    },
+    {
       "label": "Rabbit split left-right red / green",
       "mode": "split",
       "split": "samples/rabbit.png",
