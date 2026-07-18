@@ -162,19 +162,28 @@ The paint layer:
 
 This is useful when an otherwise good generated sprite has a few dirty areas, shadows, or leftover background pixels.
 
-### Grid slicing
+### Slicing
 
-The **Slice** tab divides the built transparent PNG into a fixed row/column grid. It works on the final result after crop and Paint edits.
+The **Slice** tab divides the built transparent PNG into separate files. It works on the final result after crop and Paint edits and has two modes.
 
-Controls:
+**Fixed grid** uses:
 
 - columns and rows,
 - horizontal and vertical gaps between tiles,
 - horizontal and vertical outer margins.
 
-Each tile has the same integer pixel size. If the available width or height does not divide evenly, leftover pixels on the right or bottom are discarded. The **Slice grid** preview shows the exact exported rectangles.
+Each tile has the same integer pixel size. If the available width or height does not divide evenly, leftover pixels on the right or bottom are discarded. The **Slice preview** shows the exact exported rectangles in both modes.
 
-**Download slices ZIP** creates `transparent_slices.zip` locally in the browser. Files are numbered from left to right and top to bottom as `transparent_01.png`, `transparent_02.png`, and so on. Fully transparent tiles are omitted, while the position-based numbers of non-empty tiles stay unchanged.
+**Auto-detect objects** is intended for AI-generated icon sheets that do not follow an exact grid. It detects foreground bands from output alpha, groups nearby strokes into objects, tightly crops every object, and adds configurable padding. Controls include:
+
+- alpha threshold,
+- horizontal and vertical merge gaps,
+- output padding,
+- minimum foreground pixel count for rejecting noise.
+
+Increase a merge gap when one icon is split into multiple boxes. Increase the alpha threshold or minimum pixel count when background noise becomes a separate object.
+
+**Download slices ZIP** creates `transparent_slices.zip` locally in the browser. Files are numbered from left to right and top to bottom as `transparent_01.png`, `transparent_02.png`, and so on. In fixed-grid mode, fully transparent tiles are omitted while later position-based numbers stay unchanged.
 
 ### Zoom and pan
 

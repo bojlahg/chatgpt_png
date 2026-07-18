@@ -7,6 +7,12 @@
       "sourceB": "samples/fox_white.png"
     },
     {
+      "label": "Icons red / green (irregular layout)",
+      "mode": "two",
+      "sourceA": "samples/icons_red.png",
+      "sourceB": "samples/icons_green.png"
+    },
+    {
       "label": "Rabbit split left-right red / green",
       "mode": "split",
       "split": "samples/rabbit.png",

@@ -6,12 +6,12 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Transparent PNG Builder v46</title>
-  <link rel="stylesheet" href="styles.css?v=46">
+  <title>Transparent PNG Builder v47</title>
+  <link rel="stylesheet" href="styles.css?v=47">
 </head>
 <body>
   <div class="wrap">
-    <div class="appHeader"><div class="appTitle">Transparent PNG Builder <span>v46</span></div></div>
+    <div class="appHeader"><div class="appTitle">Transparent PNG Builder <span>v47</span></div></div>
 
     <div class="grid">
       <section class="card">
@@ -261,10 +261,17 @@
 
           <div class="leftPane" data-left-pane="slice">
             <div class="panel">
-              <div><b>Slice result by grid</b></div>
-              <div class="hint" style="margin-top:6px">Build the transparent PNG first. Gaps and outer margins are excluded from the exported tiles.</div>
+              <div><b>Slice result</b></div>
+              <div class="hint" style="margin-top:6px">Use a fixed grid, or detect irregularly positioned objects from the output alpha.</div>
 
-              <div class="inlineGrid2">
+              <label for="sliceMode">Slice mode</label>
+              <select id="sliceMode">
+                <option value="grid" selected>Fixed grid</option>
+                <option value="auto">Auto-detect objects</option>
+              </select>
+
+              <div class="sliceSettings" id="sliceGridSettings">
+              <div class="inlineGrid2" style="margin-top:10px">
                 <div>
                   <label for="sliceColumns">Columns</label>
                   <input id="sliceColumns" type="number" min="1" step="1" value="5">
@@ -296,10 +303,40 @@
                   <input id="sliceMarginY" type="number" min="0" step="1" value="4">
                 </div>
               </div>
+              <div class="hint">Gaps and outer margins are excluded from the exported tiles.</div>
+              </div>
+
+              <div class="sliceSettings hidden" id="sliceAutoSettings">
+                <div class="inlineGrid2" style="margin-top:10px">
+                  <div>
+                    <label for="sliceAutoThreshold">Alpha threshold</label>
+                    <input id="sliceAutoThreshold" type="number" min="0" max="1" step="0.01" value="0.15">
+                  </div>
+                  <div>
+                    <label for="sliceAutoPadding">Padding (px)</label>
+                    <input id="sliceAutoPadding" type="number" min="0" step="1" value="4">
+                  </div>
+                </div>
+
+                <div class="inlineGrid2" style="margin-top:10px">
+                  <div>
+                    <label for="sliceAutoMergeX">Merge gap X (px)</label>
+                    <input id="sliceAutoMergeX" type="number" min="0" step="1" value="8">
+                  </div>
+                  <div>
+                    <label for="sliceAutoMergeY">Merge gap Y (px)</label>
+                    <input id="sliceAutoMergeY" type="number" min="0" step="1" value="8">
+                  </div>
+                </div>
+
+                <label for="sliceAutoMinPixels" style="margin-top:10px">Minimum foreground pixels</label>
+                <input id="sliceAutoMinPixels" type="number" min="1" step="1" value="8">
+                <div class="hint">Increase merge gaps when one icon is split into pieces. Increase the alpha threshold or minimum pixels to ignore noise.</div>
+              </div>
 
               <div class="sliceSummary hint" id="sliceSummary">Build a result to calculate tile size.</div>
               <button class="secondary" id="downloadSlicesBtn" type="button" disabled>Download slices ZIP</button>
-              <div class="hint">Fully transparent tiles are skipped. Position numbers are preserved from left to right, top to bottom.</div>
+              <div class="hint">Objects are numbered from left to right, top to bottom. Fully transparent fixed-grid tiles are skipped without renumbering later positions.</div>
             </div>
           </div>
 
@@ -494,7 +531,7 @@
           <div class="tab" data-view="alpha">Alpha mask</div>
           <div class="tab" data-view="coremask">Core mask</div>
           <div class="tab" data-view="cropbox">Crop box</div>
-          <div class="tab" data-view="slicegrid">Slice grid</div>
+          <div class="tab" data-view="slicegrid">Slice preview</div>
           <div class="tab" data-view="mismatch">Mismatch overlay</div>
         </div>
 
@@ -528,6 +565,6 @@
     </section>
 
 
-<script src="app.js?v=46"></script>
+<script src="app.js?v=47"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 "use strict";
-console.info("Transparent PNG Builder app.js v46 loaded");
+console.info("Transparent PNG Builder app.js v47 loaded");
 
 const modeSelect = document.getElementById("modeSelect");
 const twoMode = document.getElementById("twoMode");
@@ -44,12 +44,20 @@ const desatResult = document.getElementById("desatResult");
 const cropMode = document.getElementById("cropMode");
 const cropThreshold = document.getElementById("cropThreshold");
 const cropPadding = document.getElementById("cropPadding");
+const sliceMode = document.getElementById("sliceMode");
+const sliceGridSettings = document.getElementById("sliceGridSettings");
+const sliceAutoSettings = document.getElementById("sliceAutoSettings");
 const sliceColumns = document.getElementById("sliceColumns");
 const sliceRows = document.getElementById("sliceRows");
 const sliceGapX = document.getElementById("sliceGapX");
 const sliceGapY = document.getElementById("sliceGapY");
 const sliceMarginX = document.getElementById("sliceMarginX");
 const sliceMarginY = document.getElementById("sliceMarginY");
+const sliceAutoThreshold = document.getElementById("sliceAutoThreshold");
+const sliceAutoPadding = document.getElementById("sliceAutoPadding");
+const sliceAutoMergeX = document.getElementById("sliceAutoMergeX");
+const sliceAutoMergeY = document.getElementById("sliceAutoMergeY");
+const sliceAutoMinPixels = document.getElementById("sliceAutoMinPixels");
 const sliceSummary = document.getElementById("sliceSummary");
 
 const lowVal = document.getElementById("lowVal");
@@ -1193,6 +1201,14 @@ function readSliceInteger(input, label, minimum) {
   return value;
 }
 
+function readSliceFloat(input, label, minimum, maximum) {
+  const value = Number(input.value);
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new Error(`${label} must be between ${minimum} and ${maximum}.`);
+  }
+  return value;
+}
+
 function calculateSliceGeometry(width, height) {
   const columns = readSliceInteger(sliceColumns, "Columns", 1);
   const rows = readSliceInteger(sliceRows, "Rows", 1);
@@ -1217,8 +1233,21 @@ function calculateSliceGeometry(width, height) {
 
   const usedWidth = tileWidth * columns + gapX * (columns - 1);
   const usedHeight = tileHeight * rows + gapY * (rows - 1);
+  const boxes = [];
+  for (let row = 0; row < rows; row++) {
+    for (let column = 0; column < columns; column++) {
+      boxes.push({
+        x: marginX + column * (tileWidth + gapX),
+        y: marginY + row * (tileHeight + gapY),
+        width: tileWidth,
+        height: tileHeight,
+        position: row * columns + column + 1
+      });
+    }
+  }
 
   return {
+    mode: "grid",
     columns,
     rows,
     gapX,
@@ -1228,42 +1257,158 @@ function calculateSliceGeometry(width, height) {
     tileWidth,
     tileHeight,
     totalTiles,
+    boxes,
     remainderX: width - marginX * 2 - usedWidth,
     remainderY: height - marginY * 2 - usedHeight
   };
 }
 
-function createSliceGridCanvas(geometry) {
+function collectProjectionRuns(active, mergeGap) {
+  const runs = [];
+  let start = -1;
+  let previous = -1;
+
+  for (let index = 0; index < active.length; index++) {
+    if (!active[index]) continue;
+    if (start < 0) {
+      start = index;
+    } else if (index - previous - 1 > mergeGap) {
+      runs.push({ start, end: previous });
+      start = index;
+    }
+    previous = index;
+  }
+
+  if (start >= 0) runs.push({ start, end: previous });
+  return runs;
+}
+
+function calculateAutoSliceLayout(sourceCanvas) {
+  const threshold = readSliceFloat(sliceAutoThreshold, "Alpha threshold", 0, 1);
+  const padding = readSliceInteger(sliceAutoPadding, "Padding", 0);
+  const mergeX = readSliceInteger(sliceAutoMergeX, "Merge gap X", 0);
+  const mergeY = readSliceInteger(sliceAutoMergeY, "Merge gap Y", 0);
+  const minPixels = readSliceInteger(sliceAutoMinPixels, "Minimum foreground pixels", 1);
+  const ctx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+  const image = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+  const alphaCut = Math.max(1, Math.round(threshold * 255));
+  const activeRows = new Uint8Array(sourceCanvas.height);
+
+  for (let y = 0; y < sourceCanvas.height; y++) {
+    let alphaIndex = (y * sourceCanvas.width) * 4 + 3;
+    for (let x = 0; x < sourceCanvas.width; x++, alphaIndex += 4) {
+      if (image.data[alphaIndex] >= alphaCut) {
+        activeRows[y] = 1;
+        break;
+      }
+    }
+  }
+
+  const rowRuns = collectProjectionRuns(activeRows, mergeY);
+  const boxes = [];
+
+  for (const rowRun of rowRuns) {
+    const activeColumns = new Uint8Array(sourceCanvas.width);
+    for (let y = rowRun.start; y <= rowRun.end; y++) {
+      let alphaIndex = (y * sourceCanvas.width) * 4 + 3;
+      for (let x = 0; x < sourceCanvas.width; x++, alphaIndex += 4) {
+        if (image.data[alphaIndex] >= alphaCut) activeColumns[x] = 1;
+      }
+    }
+
+    const columnRuns = collectProjectionRuns(activeColumns, mergeX);
+    for (const columnRun of columnRuns) {
+      let minX = sourceCanvas.width;
+      let minY = sourceCanvas.height;
+      let maxX = -1;
+      let maxY = -1;
+      let foregroundPixels = 0;
+
+      for (let y = rowRun.start; y <= rowRun.end; y++) {
+        let alphaIndex = (y * sourceCanvas.width + columnRun.start) * 4 + 3;
+        for (let x = columnRun.start; x <= columnRun.end; x++, alphaIndex += 4) {
+          if (image.data[alphaIndex] < alphaCut) continue;
+          foregroundPixels++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+
+      if (foregroundPixels < minPixels || maxX < minX || maxY < minY) continue;
+      const x = Math.max(0, minX - padding);
+      const y = Math.max(0, minY - padding);
+      const right = Math.min(sourceCanvas.width - 1, maxX + padding);
+      const bottom = Math.min(sourceCanvas.height - 1, maxY + padding);
+      boxes.push({
+        x,
+        y,
+        width: right - x + 1,
+        height: bottom - y + 1,
+        position: boxes.length + 1,
+        foregroundPixels
+      });
+    }
+  }
+
+  if (boxes.length === 0) {
+    throw new Error("No objects were found. Lower the alpha threshold or minimum foreground pixels.");
+  }
+  if (boxes.length > 65535) {
+    throw new Error("Auto detection found more than 65,535 objects. Increase the threshold or merge gaps.");
+  }
+
+  return {
+    mode: "auto",
+    boxes,
+    totalTiles: boxes.length,
+    rowCount: rowRuns.length,
+    threshold,
+    padding,
+    mergeX,
+    mergeY,
+    minPixels
+  };
+}
+
+function calculateSliceLayout() {
+  if (!resultCanvas) return null;
+  if (sliceMode.value === "auto") {
+    return calculateAutoSliceLayout(createPreparedExportCanvas());
+  }
+  return calculateSliceGeometry(resultCanvas.width, resultCanvas.height);
+}
+
+function createSlicePreviewCanvas(layout) {
   const canvas = document.createElement("canvas");
   canvas.width = resultCanvas.width;
   canvas.height = resultCanvas.height;
   const ctx = canvas.getContext("2d");
   ctx.drawImage(resultCanvas, 0, 0);
 
-  ctx.fillStyle = "rgba(5, 10, 18, 0.58)";
-  ctx.fillRect(0, 0, canvas.width, geometry.marginY);
-  ctx.fillRect(0, canvas.height - geometry.marginY - geometry.remainderY, canvas.width, geometry.marginY + geometry.remainderY);
-  ctx.fillRect(0, geometry.marginY, geometry.marginX, canvas.height - geometry.marginY * 2 - geometry.remainderY);
-  ctx.fillRect(canvas.width - geometry.marginX - geometry.remainderX, geometry.marginY, geometry.marginX + geometry.remainderX, canvas.height - geometry.marginY * 2 - geometry.remainderY);
+  if (layout.mode === "grid") {
+    ctx.fillStyle = "rgba(5, 10, 18, 0.58)";
+    ctx.fillRect(0, 0, canvas.width, layout.marginY);
+    ctx.fillRect(0, canvas.height - layout.marginY - layout.remainderY, canvas.width, layout.marginY + layout.remainderY);
+    ctx.fillRect(0, layout.marginY, layout.marginX, canvas.height - layout.marginY * 2 - layout.remainderY);
+    ctx.fillRect(canvas.width - layout.marginX - layout.remainderX, layout.marginY, layout.marginX + layout.remainderX, canvas.height - layout.marginY * 2 - layout.remainderY);
 
-  for (let column = 0; column < geometry.columns - 1; column++) {
-    const x = geometry.marginX + (column + 1) * geometry.tileWidth + column * geometry.gapX;
-    ctx.fillRect(x, geometry.marginY, geometry.gapX, canvas.height - geometry.marginY * 2 - geometry.remainderY);
-  }
-  for (let row = 0; row < geometry.rows - 1; row++) {
-    const y = geometry.marginY + (row + 1) * geometry.tileHeight + row * geometry.gapY;
-    ctx.fillRect(geometry.marginX, y, canvas.width - geometry.marginX * 2 - geometry.remainderX, geometry.gapY);
+    for (let column = 0; column < layout.columns - 1; column++) {
+      const x = layout.marginX + (column + 1) * layout.tileWidth + column * layout.gapX;
+      ctx.fillRect(x, layout.marginY, layout.gapX, canvas.height - layout.marginY * 2 - layout.remainderY);
+    }
+    for (let row = 0; row < layout.rows - 1; row++) {
+      const y = layout.marginY + (row + 1) * layout.tileHeight + row * layout.gapY;
+      ctx.fillRect(layout.marginX, y, canvas.width - layout.marginX * 2 - layout.remainderX, layout.gapY);
+    }
   }
 
   ctx.strokeStyle = "rgba(71, 216, 255, 0.95)";
   ctx.lineWidth = Math.max(1, Math.min(canvas.width, canvas.height) / 500);
-  for (let row = 0; row < geometry.rows; row++) {
-    for (let column = 0; column < geometry.columns; column++) {
-      const x = geometry.marginX + column * (geometry.tileWidth + geometry.gapX);
-      const y = geometry.marginY + row * (geometry.tileHeight + geometry.gapY);
-      const inset = ctx.lineWidth * 0.5;
-      ctx.strokeRect(x + inset, y + inset, Math.max(0, geometry.tileWidth - ctx.lineWidth), Math.max(0, geometry.tileHeight - ctx.lineWidth));
-    }
+  for (const box of layout.boxes) {
+    const inset = ctx.lineWidth * 0.5;
+    ctx.strokeRect(box.x + inset, box.y + inset, Math.max(0, box.width - ctx.lineWidth), Math.max(0, box.height - ctx.lineWidth));
   }
 
   return canvas;
@@ -1279,8 +1424,12 @@ function invalidateSliceArtifacts() {
 }
 
 function updateSliceUi() {
+  const autoMode = sliceMode.value === "auto";
+  sliceGridSettings.classList.toggle("hidden", autoMode);
+  sliceAutoSettings.classList.toggle("hidden", !autoMode);
+
   if (!resultCanvas) {
-    sliceSummary.textContent = "Build a result to calculate tile size.";
+    sliceSummary.textContent = autoMode ? "Build a result to detect objects." : "Build a result to calculate tile size.";
     sliceSummary.className = "sliceSummary hint";
     downloadSlicesBtn.disabled = true;
     sliceGridCanvas = null;
@@ -1288,12 +1437,26 @@ function updateSliceUi() {
   }
 
   try {
-    const geometry = calculateSliceGeometry(resultCanvas.width, resultCanvas.height);
-    sliceSummary.textContent = `Tile size: ${geometry.tileWidth}×${geometry.tileHeight} px · ${geometry.totalTiles} positions · discarded right/bottom: ${geometry.remainderX}/${geometry.remainderY} px.`;
+    const layout = calculateSliceLayout();
+    if (layout.mode === "auto") {
+      let minWidth = Infinity;
+      let maxWidth = 0;
+      let minHeight = Infinity;
+      let maxHeight = 0;
+      for (const box of layout.boxes) {
+        minWidth = Math.min(minWidth, box.width);
+        maxWidth = Math.max(maxWidth, box.width);
+        minHeight = Math.min(minHeight, box.height);
+        maxHeight = Math.max(maxHeight, box.height);
+      }
+      sliceSummary.textContent = `Detected ${layout.boxes.length} objects in ${layout.rowCount} rows · sizes ${minWidth}–${maxWidth} × ${minHeight}–${maxHeight} px.`;
+    } else {
+      sliceSummary.textContent = `Tile size: ${layout.tileWidth}×${layout.tileHeight} px · ${layout.totalTiles} positions · discarded right/bottom: ${layout.remainderX}/${layout.remainderY} px.`;
+    }
     sliceSummary.className = "sliceSummary hint ok";
     downloadSlicesBtn.disabled = sliceExporting;
-    sliceGridCanvas = createSliceGridCanvas(geometry);
-    return geometry;
+    sliceGridCanvas = createSlicePreviewCanvas(layout);
+    return layout;
   } catch (error) {
     sliceSummary.textContent = String(error && error.message ? error.message : error);
     sliceSummary.className = "sliceSummary hint err";
@@ -1438,8 +1601,8 @@ function triggerBlobDownload(blob, fileName) {
 }
 
 async function downloadSlicesZip() {
-  const geometry = updateSliceUi();
-  if (!resultCanvas || !geometry || sliceExporting) return;
+  const layout = updateSliceUi();
+  if (!resultCanvas || !layout || sliceExporting) return;
 
   sliceExporting = true;
   downloadSlicesBtn.disabled = true;
@@ -1450,40 +1613,36 @@ async function downloadSlicesZip() {
     const exportCtx = exportCanvas.getContext("2d", { willReadFrequently: true });
     const exportImage = exportCtx.getImageData(0, 0, exportCanvas.width, exportCanvas.height);
     const tileCanvas = document.createElement("canvas");
-    tileCanvas.width = geometry.tileWidth;
-    tileCanvas.height = geometry.tileHeight;
     const tileCtx = tileCanvas.getContext("2d");
-    const numberWidth = Math.max(2, String(geometry.totalTiles).length);
+    const numberWidth = Math.max(2, String(layout.totalTiles).length);
     const entries = [];
 
-    for (let row = 0; row < geometry.rows; row++) {
-      for (let column = 0; column < geometry.columns; column++) {
-        if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or grid changed.");
-        const position = row * geometry.columns + column + 1;
-        const x = geometry.marginX + column * (geometry.tileWidth + geometry.gapX);
-        const y = geometry.marginY + row * (geometry.tileHeight + geometry.gapY);
-        sliceSummary.textContent = `Checking tile ${position}/${geometry.totalTiles}…`;
+    for (let index = 0; index < layout.boxes.length; index++) {
+      if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or settings changed.");
+      const box = layout.boxes[index];
+      sliceSummary.textContent = `Checking object ${index + 1}/${layout.boxes.length}…`;
 
-        if (!tileHasVisibleAlpha(exportImage, exportCanvas.width, x, y, geometry.tileWidth, geometry.tileHeight)) continue;
+      if (!tileHasVisibleAlpha(exportImage, exportCanvas.width, box.x, box.y, box.width, box.height)) continue;
 
-        tileCtx.clearRect(0, 0, geometry.tileWidth, geometry.tileHeight);
-        tileCtx.drawImage(exportCanvas, x, y, geometry.tileWidth, geometry.tileHeight, 0, 0, geometry.tileWidth, geometry.tileHeight);
-        const blob = await canvasToPngBlob(tileCanvas);
-        if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or grid changed.");
-        entries.push({
-          name: `transparent_${String(position).padStart(numberWidth, "0")}.png`,
-          data: new Uint8Array(await blob.arrayBuffer())
-        });
-      }
+      tileCanvas.width = box.width;
+      tileCanvas.height = box.height;
+      tileCtx.clearRect(0, 0, box.width, box.height);
+      tileCtx.drawImage(exportCanvas, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+      const blob = await canvasToPngBlob(tileCanvas);
+      if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or settings changed.");
+      entries.push({
+        name: `transparent_${String(box.position).padStart(numberWidth, "0")}.png`,
+        data: new Uint8Array(await blob.arrayBuffer())
+      });
     }
 
     if (entries.length === 0) {
-      throw new Error("All grid tiles are fully transparent; no ZIP was created.");
+      throw new Error("All detected slices are fully transparent; no ZIP was created.");
     }
 
     sliceSummary.textContent = `Building ZIP with ${entries.length} non-empty tile${entries.length === 1 ? "" : "s"}…`;
     const zipBlob = buildStoredZip(entries);
-    if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or grid changed.");
+    if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or settings changed.");
     triggerBlobDownload(zipBlob, "transparent_slices.zip");
     sliceSummary.textContent = `Downloaded ${entries.length} non-empty tile${entries.length === 1 ? "" : "s"} as transparent_slices.zip.`;
     sliceSummary.className = "sliceSummary hint ok";
@@ -1498,15 +1657,15 @@ async function downloadSlicesZip() {
       updateSliceUi();
       if (currentView === "slicegrid") renderViewer({ preserveScroll: false });
     } else {
-      downloadSlicesBtn.disabled = !resultCanvas || !calculateSliceGeometrySafely();
+      downloadSlicesBtn.disabled = !resultCanvas || !calculateSliceLayoutSafely();
     }
   }
 }
 
-function calculateSliceGeometrySafely() {
+function calculateSliceLayoutSafely() {
   if (!resultCanvas) return null;
   try {
-    return calculateSliceGeometry(resultCanvas.width, resultCanvas.height);
+    return calculateSliceLayout();
   } catch (_) {
     return null;
   }
@@ -2505,9 +2664,10 @@ function handleSliceSettingsInput() {
   if (currentView === "slicegrid") renderViewer({ preserveScroll: false });
 }
 
-[sliceColumns, sliceRows, sliceGapX, sliceGapY, sliceMarginX, sliceMarginY].forEach(input => {
+[sliceColumns, sliceRows, sliceGapX, sliceGapY, sliceMarginX, sliceMarginY, sliceAutoThreshold, sliceAutoPadding, sliceAutoMergeX, sliceAutoMergeY, sliceAutoMinPixels].forEach(input => {
   input.addEventListener("input", handleSliceSettingsInput);
 });
+sliceMode.addEventListener("change", handleSliceSettingsInput);
 
 downloadSlicesBtn.addEventListener("click", downloadSlicesZip);
 processBtn.addEventListener("click", processImages);
