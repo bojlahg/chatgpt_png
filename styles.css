@@ -94,6 +94,10 @@
     button.small { padding: 9px 10px; font-weight: 750; }
     button:disabled { opacity: .5; cursor: not-allowed; }
 
+    .sliceSummary { margin-top: 12px; min-height: 34px; }
+    .sliceSummary.ok { color: var(--ok); }
+    .sliceSummary.err { color: var(--err); }
+
     .status { margin-top: 12px; min-height: 18px; color: var(--muted); line-height: 1.45; font-size: 13px; white-space: pre-wrap; }
     .status.ok { color: var(--ok); }
     .status.err, .status.bad { color: var(--err); }

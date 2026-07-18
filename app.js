@@ -1,5 +1,5 @@
 "use strict";
-console.info("Transparent PNG Builder app.js v45 loaded");
+console.info("Transparent PNG Builder app.js v46 loaded");
 
 const modeSelect = document.getElementById("modeSelect");
 const twoMode = document.getElementById("twoMode");
@@ -44,6 +44,13 @@ const desatResult = document.getElementById("desatResult");
 const cropMode = document.getElementById("cropMode");
 const cropThreshold = document.getElementById("cropThreshold");
 const cropPadding = document.getElementById("cropPadding");
+const sliceColumns = document.getElementById("sliceColumns");
+const sliceRows = document.getElementById("sliceRows");
+const sliceGapX = document.getElementById("sliceGapX");
+const sliceGapY = document.getElementById("sliceGapY");
+const sliceMarginX = document.getElementById("sliceMarginX");
+const sliceMarginY = document.getElementById("sliceMarginY");
+const sliceSummary = document.getElementById("sliceSummary");
 
 const lowVal = document.getElementById("lowVal");
 const highVal = document.getElementById("highVal");
@@ -117,6 +124,7 @@ const paintUndoBtn = document.getElementById("paintUndoBtn");
 const resetOffsetsBtn = document.getElementById("resetOffsetsBtn");
 const processBtn = document.getElementById("processBtn");
 const downloadBtn = document.getElementById("downloadBtn");
+const downloadSlicesBtn = document.getElementById("downloadSlicesBtn");
 const statusEl = document.getElementById("status");
 const viewer = document.getElementById("viewer");
 const viewerZoom = document.getElementById("viewerZoom");
@@ -136,7 +144,11 @@ let alphaCanvas = null;
 let coreCanvas = null;
 let mismatchCanvas = null;
 let cropBoxCanvas = null;
+let sliceGridCanvas = null;
 let downloadUrl = null;
+let sliceDownloadUrl = null;
+let sliceExportGeneration = 0;
+let sliceExporting = false;
 let currentView = "checker";
 let lastCropPreview = null;
 
@@ -378,6 +390,7 @@ function invalidateResult() {
   coreCanvas = null;
   mismatchCanvas = null;
   cropBoxCanvas = null;
+  sliceGridCanvas = null;
   paintBaseResultData = null;
   paintBaseAlphaData = null;
   lastCropPreview = null;
@@ -386,6 +399,8 @@ function invalidateResult() {
     downloadUrl = null;
   }
   downloadBtn.style.display = "none";
+  invalidateSliceArtifacts();
+  updateSliceUi();
 }
 
 inputA.addEventListener("change", async () => {
@@ -1106,10 +1121,8 @@ function resetPaintHistoryFromCurrentResult() {
   }
 }
 
-async function updateDownloadFromResultCanvas() {
-  if (!resultCanvas) return;
-  if (downloadUrl) URL.revokeObjectURL(downloadUrl);
-
+function createPreparedExportCanvas() {
+  if (!resultCanvas) return null;
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = resultCanvas.width;
   exportCanvas.height = resultCanvas.height;
@@ -1147,10 +1160,356 @@ async function updateDownloadFromResultCanvas() {
     exportCtx.putImageData(image, 0, 0);
   }
 
-  const blob = await new Promise(resolve => exportCanvas.toBlob(resolve, "image/png"));
+  return exportCanvas;
+}
+
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (blob) resolve(blob);
+      else reject(new Error("The browser could not encode the PNG."));
+    }, "image/png");
+  });
+}
+
+async function updateDownloadFromResultCanvas() {
+  if (!resultCanvas) return;
+  if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+  invalidateSliceArtifacts();
+  updateSliceUi();
+
+  const exportCanvas = createPreparedExportCanvas();
+  const blob = await canvasToPngBlob(exportCanvas);
   downloadUrl = URL.createObjectURL(blob);
   downloadBtn.href = downloadUrl;
   downloadBtn.style.display = "inline-block";
+}
+
+function readSliceInteger(input, label, minimum) {
+  const value = Number(input.value);
+  if (!Number.isSafeInteger(value) || value < minimum) {
+    throw new Error(`${label} must be an integer of at least ${minimum}.`);
+  }
+  return value;
+}
+
+function calculateSliceGeometry(width, height) {
+  const columns = readSliceInteger(sliceColumns, "Columns", 1);
+  const rows = readSliceInteger(sliceRows, "Rows", 1);
+  const gapX = readSliceInteger(sliceGapX, "Gap X", 0);
+  const gapY = readSliceInteger(sliceGapY, "Gap Y", 0);
+  const marginX = readSliceInteger(sliceMarginX, "Outer margin X", 0);
+  const marginY = readSliceInteger(sliceMarginY, "Outer margin Y", 0);
+  const totalTiles = columns * rows;
+
+  if (!Number.isSafeInteger(totalTiles) || totalTiles > 65535) {
+    throw new Error("The grid may contain at most 65,535 tiles.");
+  }
+
+  const usableWidth = width - marginX * 2 - gapX * (columns - 1);
+  const usableHeight = height - marginY * 2 - gapY * (rows - 1);
+  const tileWidth = Math.floor(usableWidth / columns);
+  const tileHeight = Math.floor(usableHeight / rows);
+
+  if (tileWidth < 1 || tileHeight < 1) {
+    throw new Error(`The ${width}×${height} result has no room for this grid. Reduce rows, columns, gaps, or margins.`);
+  }
+
+  const usedWidth = tileWidth * columns + gapX * (columns - 1);
+  const usedHeight = tileHeight * rows + gapY * (rows - 1);
+
+  return {
+    columns,
+    rows,
+    gapX,
+    gapY,
+    marginX,
+    marginY,
+    tileWidth,
+    tileHeight,
+    totalTiles,
+    remainderX: width - marginX * 2 - usedWidth,
+    remainderY: height - marginY * 2 - usedHeight
+  };
+}
+
+function createSliceGridCanvas(geometry) {
+  const canvas = document.createElement("canvas");
+  canvas.width = resultCanvas.width;
+  canvas.height = resultCanvas.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(resultCanvas, 0, 0);
+
+  ctx.fillStyle = "rgba(5, 10, 18, 0.58)";
+  ctx.fillRect(0, 0, canvas.width, geometry.marginY);
+  ctx.fillRect(0, canvas.height - geometry.marginY - geometry.remainderY, canvas.width, geometry.marginY + geometry.remainderY);
+  ctx.fillRect(0, geometry.marginY, geometry.marginX, canvas.height - geometry.marginY * 2 - geometry.remainderY);
+  ctx.fillRect(canvas.width - geometry.marginX - geometry.remainderX, geometry.marginY, geometry.marginX + geometry.remainderX, canvas.height - geometry.marginY * 2 - geometry.remainderY);
+
+  for (let column = 0; column < geometry.columns - 1; column++) {
+    const x = geometry.marginX + (column + 1) * geometry.tileWidth + column * geometry.gapX;
+    ctx.fillRect(x, geometry.marginY, geometry.gapX, canvas.height - geometry.marginY * 2 - geometry.remainderY);
+  }
+  for (let row = 0; row < geometry.rows - 1; row++) {
+    const y = geometry.marginY + (row + 1) * geometry.tileHeight + row * geometry.gapY;
+    ctx.fillRect(geometry.marginX, y, canvas.width - geometry.marginX * 2 - geometry.remainderX, geometry.gapY);
+  }
+
+  ctx.strokeStyle = "rgba(71, 216, 255, 0.95)";
+  ctx.lineWidth = Math.max(1, Math.min(canvas.width, canvas.height) / 500);
+  for (let row = 0; row < geometry.rows; row++) {
+    for (let column = 0; column < geometry.columns; column++) {
+      const x = geometry.marginX + column * (geometry.tileWidth + geometry.gapX);
+      const y = geometry.marginY + row * (geometry.tileHeight + geometry.gapY);
+      const inset = ctx.lineWidth * 0.5;
+      ctx.strokeRect(x + inset, y + inset, Math.max(0, geometry.tileWidth - ctx.lineWidth), Math.max(0, geometry.tileHeight - ctx.lineWidth));
+    }
+  }
+
+  return canvas;
+}
+
+function invalidateSliceArtifacts() {
+  sliceExportGeneration++;
+  sliceGridCanvas = null;
+  if (sliceDownloadUrl) {
+    URL.revokeObjectURL(sliceDownloadUrl);
+    sliceDownloadUrl = null;
+  }
+}
+
+function updateSliceUi() {
+  if (!resultCanvas) {
+    sliceSummary.textContent = "Build a result to calculate tile size.";
+    sliceSummary.className = "sliceSummary hint";
+    downloadSlicesBtn.disabled = true;
+    sliceGridCanvas = null;
+    return null;
+  }
+
+  try {
+    const geometry = calculateSliceGeometry(resultCanvas.width, resultCanvas.height);
+    sliceSummary.textContent = `Tile size: ${geometry.tileWidth}×${geometry.tileHeight} px · ${geometry.totalTiles} positions · discarded right/bottom: ${geometry.remainderX}/${geometry.remainderY} px.`;
+    sliceSummary.className = "sliceSummary hint ok";
+    downloadSlicesBtn.disabled = sliceExporting;
+    sliceGridCanvas = createSliceGridCanvas(geometry);
+    return geometry;
+  } catch (error) {
+    sliceSummary.textContent = String(error && error.message ? error.message : error);
+    sliceSummary.className = "sliceSummary hint err";
+    downloadSlicesBtn.disabled = true;
+    sliceGridCanvas = null;
+    return null;
+  }
+}
+
+function tileHasVisibleAlpha(imageData, sourceWidth, x, y, width, height) {
+  const data = imageData.data;
+  const xEnd = x + width;
+  const yEnd = y + height;
+  for (let py = y; py < yEnd; py++) {
+    let alphaIndex = (py * sourceWidth + x) * 4 + 3;
+    for (let px = x; px < xEnd; px++, alphaIndex += 4) {
+      if (data[alphaIndex] !== 0) return true;
+    }
+  }
+  return false;
+}
+
+let crc32Table = null;
+
+function getCrc32Table() {
+  if (crc32Table) return crc32Table;
+  crc32Table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let value = n;
+    for (let bit = 0; bit < 8; bit++) {
+      value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+    }
+    crc32Table[n] = value >>> 0;
+  }
+  return crc32Table;
+}
+
+function crc32(bytes) {
+  const table = getCrc32Table();
+  let value = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    value = table[(value ^ bytes[i]) & 0xff] ^ (value >>> 8);
+  }
+  return (value ^ 0xffffffff) >>> 0;
+}
+
+function makeZipHeader(length) {
+  return new Uint8Array(length);
+}
+
+function setZipUint16(bytes, offset, value) {
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint16(offset, value, true);
+}
+
+function setZipUint32(bytes, offset, value) {
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint32(offset, value >>> 0, true);
+}
+
+function getDosDateTime(date) {
+  const year = Math.max(1980, date.getFullYear());
+  return {
+    time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+  };
+}
+
+function buildStoredZip(entries) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  const now = getDosDateTime(new Date());
+  let localOffset = 0;
+
+  for (const entry of entries) {
+    const name = encoder.encode(entry.name);
+    const data = entry.data;
+    const checksum = crc32(data);
+    const local = makeZipHeader(30 + name.length);
+    setZipUint32(local, 0, 0x04034b50);
+    setZipUint16(local, 4, 20);
+    setZipUint16(local, 6, 0x0800);
+    setZipUint16(local, 8, 0);
+    setZipUint16(local, 10, now.time);
+    setZipUint16(local, 12, now.date);
+    setZipUint32(local, 14, checksum);
+    setZipUint32(local, 18, data.length);
+    setZipUint32(local, 22, data.length);
+    setZipUint16(local, 26, name.length);
+    setZipUint16(local, 28, 0);
+    local.set(name, 30);
+    localParts.push(local, data);
+
+    const central = makeZipHeader(46 + name.length);
+    setZipUint32(central, 0, 0x02014b50);
+    setZipUint16(central, 4, 20);
+    setZipUint16(central, 6, 20);
+    setZipUint16(central, 8, 0x0800);
+    setZipUint16(central, 10, 0);
+    setZipUint16(central, 12, now.time);
+    setZipUint16(central, 14, now.date);
+    setZipUint32(central, 16, checksum);
+    setZipUint32(central, 20, data.length);
+    setZipUint32(central, 24, data.length);
+    setZipUint16(central, 28, name.length);
+    setZipUint16(central, 30, 0);
+    setZipUint16(central, 32, 0);
+    setZipUint16(central, 34, 0);
+    setZipUint16(central, 36, 0);
+    setZipUint32(central, 38, 0);
+    setZipUint32(central, 42, localOffset);
+    central.set(name, 46);
+    centralParts.push(central);
+
+    localOffset += local.length + data.length;
+    if (localOffset > 0xffffffff) throw new Error("The ZIP archive is too large for this exporter.");
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = makeZipHeader(22);
+  setZipUint32(end, 0, 0x06054b50);
+  setZipUint16(end, 4, 0);
+  setZipUint16(end, 6, 0);
+  setZipUint16(end, 8, entries.length);
+  setZipUint16(end, 10, entries.length);
+  setZipUint32(end, 12, centralSize);
+  setZipUint32(end, 16, localOffset);
+  setZipUint16(end, 20, 0);
+
+  return new Blob([...localParts, ...centralParts, end], { type: "application/zip" });
+}
+
+function triggerBlobDownload(blob, fileName) {
+  if (sliceDownloadUrl) URL.revokeObjectURL(sliceDownloadUrl);
+  sliceDownloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = sliceDownloadUrl;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+async function downloadSlicesZip() {
+  const geometry = updateSliceUi();
+  if (!resultCanvas || !geometry || sliceExporting) return;
+
+  sliceExporting = true;
+  downloadSlicesBtn.disabled = true;
+  const generation = sliceExportGeneration;
+
+  try {
+    const exportCanvas = createPreparedExportCanvas();
+    const exportCtx = exportCanvas.getContext("2d", { willReadFrequently: true });
+    const exportImage = exportCtx.getImageData(0, 0, exportCanvas.width, exportCanvas.height);
+    const tileCanvas = document.createElement("canvas");
+    tileCanvas.width = geometry.tileWidth;
+    tileCanvas.height = geometry.tileHeight;
+    const tileCtx = tileCanvas.getContext("2d");
+    const numberWidth = Math.max(2, String(geometry.totalTiles).length);
+    const entries = [];
+
+    for (let row = 0; row < geometry.rows; row++) {
+      for (let column = 0; column < geometry.columns; column++) {
+        if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or grid changed.");
+        const position = row * geometry.columns + column + 1;
+        const x = geometry.marginX + column * (geometry.tileWidth + geometry.gapX);
+        const y = geometry.marginY + row * (geometry.tileHeight + geometry.gapY);
+        sliceSummary.textContent = `Checking tile ${position}/${geometry.totalTiles}…`;
+
+        if (!tileHasVisibleAlpha(exportImage, exportCanvas.width, x, y, geometry.tileWidth, geometry.tileHeight)) continue;
+
+        tileCtx.clearRect(0, 0, geometry.tileWidth, geometry.tileHeight);
+        tileCtx.drawImage(exportCanvas, x, y, geometry.tileWidth, geometry.tileHeight, 0, 0, geometry.tileWidth, geometry.tileHeight);
+        const blob = await canvasToPngBlob(tileCanvas);
+        if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or grid changed.");
+        entries.push({
+          name: `transparent_${String(position).padStart(numberWidth, "0")}.png`,
+          data: new Uint8Array(await blob.arrayBuffer())
+        });
+      }
+    }
+
+    if (entries.length === 0) {
+      throw new Error("All grid tiles are fully transparent; no ZIP was created.");
+    }
+
+    sliceSummary.textContent = `Building ZIP with ${entries.length} non-empty tile${entries.length === 1 ? "" : "s"}…`;
+    const zipBlob = buildStoredZip(entries);
+    if (generation !== sliceExportGeneration) throw new Error("Slice export was cancelled because the result or grid changed.");
+    triggerBlobDownload(zipBlob, "transparent_slices.zip");
+    sliceSummary.textContent = `Downloaded ${entries.length} non-empty tile${entries.length === 1 ? "" : "s"} as transparent_slices.zip.`;
+    sliceSummary.className = "sliceSummary hint ok";
+  } catch (error) {
+    if (generation === sliceExportGeneration) {
+      sliceSummary.textContent = String(error && error.message ? error.message : error);
+      sliceSummary.className = "sliceSummary hint err";
+    }
+  } finally {
+    sliceExporting = false;
+    if (generation !== sliceExportGeneration) {
+      updateSliceUi();
+      if (currentView === "slicegrid") renderViewer({ preserveScroll: false });
+    } else {
+      downloadSlicesBtn.disabled = !resultCanvas || !calculateSliceGeometrySafely();
+    }
+  }
+}
+
+function calculateSliceGeometrySafely() {
+  if (!resultCanvas) return null;
+  try {
+    return calculateSliceGeometry(resultCanvas.width, resultCanvas.height);
+  } catch (_) {
+    return null;
+  }
 }
 
 function pushPaintUndoSnapshot() {
@@ -2012,6 +2371,7 @@ function getCanvasToShowForCurrentView() {
   if (currentView === "alpha") canvasToShow = alphaCanvas;
   if (currentView === "coremask") canvasToShow = coreCanvas;
   if (currentView === "cropbox") canvasToShow = cropBoxCanvas || resultCanvas;
+  if (currentView === "slicegrid") canvasToShow = sliceGridCanvas || resultCanvas;
   if (currentView === "mismatch") canvasToShow = mismatchCanvas;
   return canvasToShow;
 }
@@ -2139,6 +2499,17 @@ viewer.addEventListener("wheel", event => {
   zoomPreviewByStep(event.deltaY < 0 ? 1 : -1, event);
 }, { passive: false });
 
+function handleSliceSettingsInput() {
+  invalidateSliceArtifacts();
+  updateSliceUi();
+  if (currentView === "slicegrid") renderViewer({ preserveScroll: false });
+}
+
+[sliceColumns, sliceRows, sliceGapX, sliceGapY, sliceMarginX, sliceMarginY].forEach(input => {
+  input.addEventListener("input", handleSliceSettingsInput);
+});
+
+downloadSlicesBtn.addEventListener("click", downloadSlicesZip);
 processBtn.addEventListener("click", processImages);
 
 document.querySelectorAll(".tab").forEach(tab => {
@@ -2158,6 +2529,12 @@ function setupLeftTabs() {
   function activate(key) {
     buttons.forEach(btn => btn.classList.toggle("active", btn.dataset.leftTab === key));
     panes.forEach(pane => pane.classList.toggle("active", pane.dataset.leftPane === key));
+    if (key === "slice") {
+      document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.view === "slicegrid"));
+      currentView = "slicegrid";
+      updateSliceUi();
+      renderViewer({ preserveScroll: false });
+    }
   }
 
   buttons.forEach(btn => {

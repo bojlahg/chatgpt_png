@@ -114,7 +114,8 @@ For smoke, fire, glass, magic effects, or other translucent things, this method 
    - Alpha mask
 6. Use **Alpha cleanup** if needed.
 7. Use **Paint** for manual fixes.
-8. Download the final PNG.
+8. Download the final PNG, or open **Slice** to divide it into a grid.
+9. In **Slice**, set rows, columns, gaps, and outer margins, inspect **Slice grid**, then download the non-empty tiles as one ZIP archive.
 
 ---
 
@@ -160,6 +161,20 @@ The paint layer:
 - works with zoomed preview.
 
 This is useful when an otherwise good generated sprite has a few dirty areas, shadows, or leftover background pixels.
+
+### Grid slicing
+
+The **Slice** tab divides the built transparent PNG into a fixed row/column grid. It works on the final result after crop and Paint edits.
+
+Controls:
+
+- columns and rows,
+- horizontal and vertical gaps between tiles,
+- horizontal and vertical outer margins.
+
+Each tile has the same integer pixel size. If the available width or height does not divide evenly, leftover pixels on the right or bottom are discarded. The **Slice grid** preview shows the exact exported rectangles.
+
+**Download slices ZIP** creates `transparent_slices.zip` locally in the browser. Files are numbered from left to right and top to bottom as `transparent_01.png`, `transparent_02.png`, and so on. Fully transparent tiles are omitted, while the position-based numbers of non-empty tiles stay unchanged.
 
 ### Zoom and pan
 

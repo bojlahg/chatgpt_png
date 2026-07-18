@@ -6,12 +6,12 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Transparent PNG Builder v45</title>
-  <link rel="stylesheet" href="styles.css?v=45">
+  <title>Transparent PNG Builder v46</title>
+  <link rel="stylesheet" href="styles.css?v=46">
 </head>
 <body>
   <div class="wrap">
-    <div class="appHeader"><div class="appTitle">Transparent PNG Builder <span>v45</span></div></div>
+    <div class="appHeader"><div class="appTitle">Transparent PNG Builder <span>v46</span></div></div>
 
     <div class="grid">
       <section class="card">
@@ -20,6 +20,7 @@
           <button class="leftTab" type="button" data-left-tab="colors">Colors</button>
           <button class="leftTab" type="button" data-left-tab="process">Process</button>
           <button class="leftTab" type="button" data-left-tab="crop">Crop</button>
+          <button class="leftTab" type="button" data-left-tab="slice">Slice</button>
           <button class="leftTab" type="button" data-left-tab="manual">Paint</button>
           <button class="leftTab" type="button" data-left-tab="debug">Debug</button>
         </div>
@@ -69,7 +70,6 @@
             </select>
             <div class="hint">Source A = left/top, Source B = right/bottom.</div>
           </div>
-
 
           </div>
 
@@ -257,6 +257,50 @@
           </div>
 
 
+          </div>
+
+          <div class="leftPane" data-left-pane="slice">
+            <div class="panel">
+              <div><b>Slice result by grid</b></div>
+              <div class="hint" style="margin-top:6px">Build the transparent PNG first. Gaps and outer margins are excluded from the exported tiles.</div>
+
+              <div class="inlineGrid2">
+                <div>
+                  <label for="sliceColumns">Columns</label>
+                  <input id="sliceColumns" type="number" min="1" step="1" value="5">
+                </div>
+                <div>
+                  <label for="sliceRows">Rows</label>
+                  <input id="sliceRows" type="number" min="1" step="1" value="5">
+                </div>
+              </div>
+
+              <div class="inlineGrid2" style="margin-top:10px">
+                <div>
+                  <label for="sliceGapX">Gap X (px)</label>
+                  <input id="sliceGapX" type="number" min="0" step="1" value="2">
+                </div>
+                <div>
+                  <label for="sliceGapY">Gap Y (px)</label>
+                  <input id="sliceGapY" type="number" min="0" step="1" value="2">
+                </div>
+              </div>
+
+              <div class="inlineGrid2" style="margin-top:10px">
+                <div>
+                  <label for="sliceMarginX">Outer margin X (px)</label>
+                  <input id="sliceMarginX" type="number" min="0" step="1" value="4">
+                </div>
+                <div>
+                  <label for="sliceMarginY">Outer margin Y (px)</label>
+                  <input id="sliceMarginY" type="number" min="0" step="1" value="4">
+                </div>
+              </div>
+
+              <div class="sliceSummary hint" id="sliceSummary">Build a result to calculate tile size.</div>
+              <button class="secondary" id="downloadSlicesBtn" type="button" disabled>Download slices ZIP</button>
+              <div class="hint">Fully transparent tiles are skipped. Position numbers are preserved from left to right, top to bottom.</div>
+            </div>
           </div>
 
           <div class="leftPane" data-left-pane="manual">
@@ -450,6 +494,7 @@
           <div class="tab" data-view="alpha">Alpha mask</div>
           <div class="tab" data-view="coremask">Core mask</div>
           <div class="tab" data-view="cropbox">Crop box</div>
+          <div class="tab" data-view="slicegrid">Slice grid</div>
           <div class="tab" data-view="mismatch">Mismatch overlay</div>
         </div>
 
@@ -483,6 +528,6 @@
     </section>
 
 
-<script src="app.js?v=45"></script>
+<script src="app.js?v=46"></script>
 </body>
 </html>
